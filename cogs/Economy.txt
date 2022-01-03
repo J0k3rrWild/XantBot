@@ -1,0 +1,250 @@
+import discord
+from discord.ext import commands
+import asyncio
+import datetime
+import sqlite3
+conn = sqlite3.connect('main.db')
+c = conn.cursor()
+from discord.ext.commands import Bot
+import math
+import random
+
+class Economy(commands.Cog):
+
+    def __init__(self, bot):
+        self.bot = bot
+
+    @commands.Cog.listener()
+    async def on_message(self, message):
+            c.execute(f"SELECT guild_id, user_id, cash, buy, buyitem, bank FROM economy WHERE guild_id = '{message.guild.id}' and user_id='{message.author.id}'")
+            r = c.fetchone()
+            if message.author.bot:
+                return
+            if r is None:
+                sql = ("INSERT INTO economy(guild_id, user_id, cash, buy, buyitem, bank) VALUES(?,?,?,?,?,?)")
+                val = (message.guild.id, message.author.id, 0, 'False', 'None', 0)
+                c.execute(sql, val)
+                conn.commit()
+    
+            else:
+                    c.execute(f"SELECT user_id, cash FROM economy WHERE guild_id = '{message.guild.id}' and user_id='{message.author.id}'")
+                    r1 = c.fetchone()
+                    cash = float(r1[1])
+                    sql = ("UPDATE economy SET cash = ? WHERE guild_id = ? and user_id = ?")
+                    val = (cash + 0.25, str(message.guild.id), str(message.author.id))
+                    c.execute(sql, val)
+                    conn.commit()
+
+                
+    @commands.command(aliases=['bal', 'balance', 'sejf', 'money'])
+    async def bank(self, ctx, user:discord.User=None):
+        if user is not None:
+            c.execute(f"SELECT user_id, cash, bank FROM economy WHERE guild_id = '{ctx.message.guild.id}' and user_id = '{user.id}'")
+            r = c.fetchone()
+            m = float(r[1])
+            b = float(r[2])
+            suma = m + b
+            monety = str(r[1])
+            bank = str(r[2])
+            
+            if r is None:
+                embed = discord.Embed()
+                embed.add_field(name='Error',value=f"The user is not in the database, after writing several messages he will be added to it")
+                await ctx.send(embed=embed)
+            else:
+                embed = discord.Embed(title=f"Bank Account  **{user.name}**")
+                embed.add_field(name='Cash:',value=f"{monety}")
+                embed.add_field(name='Bank:',value=f"{bank}")
+                embed.add_field(name='Total:',value=f"{suma}")
+                embed.set_thumbnail(url=user.avatar_url)
+                await ctx.send(embed=embed)
+        elif user is None:
+            c.execute(f"SELECT user_id, cash, bank FROM economy WHERE guild_id = '{ctx.message.guild.id}' and user_id = '{ctx.message.author.id}'")
+            r = c.fetchone()
+            m = float(r[1])
+            b = float(r[2])
+            suma = m + b
+            monety = str(r[1])
+            bank = str(r[2])
+            if r is None:
+                embed = discord.Embed()
+                embed.add_field(name='Error',value=f"You are not in Database, Write some messages, to added you in server table")
+                await ctx.send(embed=embed)
+            else:
+                embed = discord.Embed(title=f"Bank Account **{ctx.message.author.name}**")
+                embed.add_field(name='Cash:',value=f"{monety}")
+                embed.add_field(name='Bank:',value=f"{bank}")
+                embed.add_field(name='Total:',value=f"{suma}")
+                embed.set_thumbnail(url=ctx.message.author.avatar_url)
+                await ctx.send(embed=embed)
+   
+    @commands.command()
+    @commands.cooldown(1, 1800 , commands.BucketType.member)
+    async def work(self, ctx):
+        wyplata = random.randint(25,50)
+        embed = discord.Embed()
+        embed.add_field(name='Work', value=f'{wyplata} coins earned')
+        await ctx.send(embed=embed)
+        c.execute(f"SELECT user_id, cash FROM economy WHERE guild_id = '{ctx.guild.id}' and user_id='{ctx.author.id}'")
+        r2 = c.fetchone()
+        cash = float(r2[1])
+        sql = ("UPDATE economy SET cash = ? WHERE guild_id = ? and user_id = ?")
+        val = (cash + wyplata, str(ctx.guild.id), str(ctx.author.id))
+        
+        c.execute(sql, val)
+        conn.commit()
+        
+
+
+    @commands.command(aliases=['set-money'])
+    async def set_money(self, ctx, ludz: discord.User, money):
+        if ludz is None:
+            a = discord.Embed()
+            a.add_field(name="**Error**", value='Enter the nick of the user you want to set the coins')
+            await ctx.send(embed=a)
+        elif money is None:
+            b = discord.Embed()
+            b.add_field(name="**Error**", value='Enter the amount of coins you want to set to the user')
+            await ctx.send(embed=b)
+        else:
+            
+            sql = ("UPDATE economy SET cash = ? WHERE guild_id = ? and user_id = ?")
+            val = (money, str(ctx.guild.id), str(ludz.id))
+            c.execute(sql, val)
+            conn.commit()
+            cc = discord.Embed()
+            cc.add_field(name='**Succes**', value=f'Successfully set ``{money}`` coins to user ``{ludz.name}``')
+            await ctx.send(embed=cc)
+
+    
+    @commands.command(aliases=['remove-money'])
+    async def remove_money(self, ctx, user: discord.User, money):
+        c.execute(f"SELECT user_id, cash FROM economy WHERE guild_id = '{ctx.guild.id}'")
+        r = c.fetchone()
+        cash = float(r[1])
+        hajs = cash - float(money)
+        if hajs < 0:
+            sql = ("UPDATE economy SET cash = ? WHERE guild_id = ? and user_id = ?")
+            val = (0, str(ctx.guild.id), str(user.id))
+            c.execute(sql, val)
+            conn.commit()
+            cc = discord.Embed()
+            cc.add_field(name='**Succes**', value=f"due to the fact that the user's check was negative ``{hajs}``, the coins were reset to 0")
+            await ctx.send(embed=cc)
+        else:
+            sql = ("UPDATE economy SET cash = ? WHERE guild_id = ? and user_id = ?")
+            val = (hajs, str(ctx.guild.id), str(user.id))
+            c.execute(sql, val)
+            conn.commit()
+            dd = discord.Embed()
+            dd.add_field(name='**Succes**', value=f'Succesfully remove ``{money}`` coins to user ``{user.name}``')
+            await ctx.send(embed=dd)
+        
+        
+    @commands.command(aliases=['add-money'])
+    async def add_money(self, ctx, user: discord.User, money):
+        c.execute(f"SELECT user_id, cash FROM economy WHERE guild_id = '{ctx.guild.id}'")
+        r = c.fetchone()
+        cash = float(r[1])
+        hajs = cash + float(money)
+        sql = ("UPDATE economy SET cash = ? WHERE guild_id = ? and user_id = ?")
+        val = (hajs, str(ctx.guild.id), str(user.id))
+        c.execute(sql, val)
+        conn.commit()
+        dd = discord.Embed()
+        dd.add_field(name='**Succes**', value=f'Successfully add ``{money}`` coins to user ``{user.name}``')
+        await ctx.send(embed=dd)
+
+    @commands.command(aliases=['reset-money'])
+    async def reset_money(self, ctx, ludz: discord.User=None):
+        if ludz is  None:
+            a = discord.Embed()
+            a.add_field(name="**Error**", value='Enter the nickname of the user you want to reset coins')
+            await ctx.send(embed=a)
+        else:
+            sql = ("UPDATE economy SET cash = ?, bank = ? WHERE guild_id = ? and user_id = ?")
+            val = (0,0, str(ctx.guild.id), str(ludz.id))
+            c.execute(sql, val)
+            conn.commit()
+            cc = discord.Embed()
+            cc.add_field(name='**Succes**', value=f' ``{ludz.name}`` Coins successfully reset')
+            await ctx.send(embed=cc)
+        
+    @commands.command()
+    async def dep(self, ctx, hajs = None):
+        if hajs is None:
+            a = discord.Embed()
+            a.add_field(name='**Error**',value='Argument is empty')
+            await ctx.send(embed=a)
+
+        else:
+            c.execute(f"SELECT user_id, cash, bank FROM economy WHERE guild_id = '{ctx.guild.id}' and user_id = '{ctx.author.id}'")
+            r = c.fetchone()
+            money= float(r[1])
+            bank = float(r[2])
+            if float(hajs) <= money:
+                
+                
+                sql1 = "UPDATE economy SET cash = ? WHERE guild_id = ? and user_id = ?"
+                val1 = (float(r[1]) - float(hajs), str(ctx.guild.id), str(ctx.author.id))
+                sql = "UPDATE economy SET bank = ? WHERE guild_id = ? and user_id = ?"
+                val = (float(r[2]) + float(hajs), str(ctx.guild.id), str(ctx.author.id))
+                
+               
+                embed = discord.Embed(
+                    title = ":wrench: | Economy",
+                    description = "The amount has been successfully transferred to the bank!",
+                    colour = discord.Colour.red()
+                )
+                await ctx.send(embed=embed)
+                c.execute(sql, val)
+                c.execute(sql1, val1)
+                conn.commit()
+            else:
+                embed = discord.Embed(
+                    title = ":no_entry: | Error",
+                    description = "You don't have that amount!",
+                    colour = discord.Colour.red()
+                    )
+                await ctx.send(embed=embed)
+                
+        
+    @commands.command(aliases=['with'])
+    async def withdrawn(self, ctx, hajs = None):
+        if hajs is None:
+            a = discord.Embed()
+            a.add_field(name='**Error**',value='Argument is empty')
+            await ctx.send(embed=a)
+        else:
+            c.execute(f"SELECT user_id, cash, bank FROM economy WHERE guild_id = '{ctx.guild.id}' and user_id = '{ctx.author.id}'")
+            r = c.fetchone()
+            money= float(r[1])
+            bank = float(r[2])
+            if float(hajs) <= bank:
+                
+                
+                sql1 = "UPDATE economy SET cash = ? WHERE guild_id = ? and user_id = ?"
+                val1 = (float(r[1]) + float(hajs), str(ctx.guild.id), str(ctx.author.id))
+                sql = "UPDATE economy SET bank = ? WHERE guild_id = ? and user_id = ?"
+                val = (float(r[2]) - float(hajs), str(ctx.guild.id), str(ctx.author.id))
+                
+               
+                embed = discord.Embed(
+                    title = ":wrench: | Economy",
+                    description = "The amount has been successfully withdrawn from the bank!",
+                    colour = discord.Colour.red()
+                )
+                await ctx.send(embed=embed)
+                c.execute(sql, val)
+                c.execute(sql1, val1)
+                conn.commit()
+            else:
+                embed = discord.Embed(
+                    title = ":no_entry: | Error",
+                    description = "You don't have that amount at the Bank!",
+                    colour = discord.Colour.red()
+                    )
+                await ctx.send(embed=embed)
+def setup(bot):
+    bot.add_cog(Economy(bot))
+

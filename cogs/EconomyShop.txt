@@ -1,0 +1,208 @@
+import discord
+from discord import reaction 
+from discord.ext import commands
+import asyncio
+import datetime
+import sqlite3
+conn = sqlite3.connect('main.db')
+c = conn.cursor()
+import math
+import random
+import binascii
+import os
+
+
+class EconomyShop(commands.Cog):
+    def __init__(self,bot):
+        self.bot = bot
+
+    @commands.command()
+    async def sklep(self, ctx):
+        c.execute(f"SELECT guild_id FROM shop WHERE guild_id = '{ctx.message.guild.id}'")
+        r = c.fetchone()
+        if r is None:
+            embed = discord.Embed()
+            embed.add_field(name='**Error*', value='It looks like the store is empty')
+            await ctx.send(embed=embed)
+        else:
+            c.execute(f"SELECT guild_id, item_name, item_desc, item_prize FROM shop WHERE guild_id = '{ctx.guild.id}'")
+            r2 = c.fetchall()
+            desc = ''
+            for r2 in r2:
+               
+
+                if r2[0] == None:
+                    continue
+            
+                itemm = r2[1]
+                opis = r2[2]
+                cena = r2[3]
+                desc += f'\n :money_with_wings: {cena} - {itemm}\n{opis}\n'
+            
+            embed = discord.Embed()
+            embed.add_field(name=f'Shop {ctx.guild.name}', value=desc)
+            embed.set_footer(text=f'{ctx.message.guild}')
+            embed.timestamp = datetime.datetime.utcnow()
+            await ctx.send(embed=embed)
+            conn.commit()
+    @commands.command()
+    async def sklep_info(self, ctx, item=None):
+        if item is None:
+                embed = discord.Embed()
+                embed.add_field(name='**Error*', value='Select the item you want to watch')
+                await ctx.send(embed=embed)
+    
+        elif item is not None:
+            c.execute(f"SELECT guild_id, item_name, item_desc, item_prize FROM shop WHERE guild_id = '{ctx.guild.id}' and item_name = '{item}'")
+            r = c.fetchone()
+            itemm = r[1]
+            opis = r[2]
+            cena = r[3]
+            if itemm == item:
+                embed = discord.Embed()
+                embed.add_field(name=f'Item:', value=f'{itemm}')
+                embed.add_field(name=f'Desc:', value=f'{opis}')
+                embed.add_field(name=f'Price:', value=f'{cena}')
+                await ctx.send(embed=embed)
+            else:
+                embed = discord.Embed()
+                embed.add_field(name='*Error*', value='Please select the correct item from the shop!')
+                await ctx.send(embed=embed)
+    @commands.has_permissions(administrator= True)    
+    @commands.command()
+    async def addshopitem(self, ctx, name=None, prize=None, *, Desc=None):
+        if name is None or prize is None:
+            embed = discord.Embed()
+            embed.add_field(name='**Error**', value='enter the name and price of the item you want to add to the store')
+            await ctx.send(embed=embed)
+        elif name is not None or prize is not None:
+            sql = ("INSERT INTO shop(guild_id, item_name, item_desc,item_prize ) VALUES(?,?,?,?)")
+            val = (ctx.guild.id, name, Desc, prize)
+            c.execute(sql, val)
+            embed = discord.Embed()
+            embed.add_field(name='** **', value='Item was succesully added!', inline=False)
+            embed.add_field(name=f'Item:', value=f'{name}', inline=False)
+            embed.add_field(name=f'Desc:', value=f'{Desc}', inline=False)
+            embed.add_field(name=f'Price:', value=f'{prize}', inline=False)
+            await ctx.send(embed=embed)
+            conn.commit()
+            
+
+    @commands.command(enabled=True)
+    async def tkey(self, ctx):
+        key = binascii.hexlify(os.urandom(24))
+        a = discord.Embed()
+        a.add_field(name='Klucz traksakcji', value=f'{key}')
+        await ctx.send(embed=a)
+    @commands.command(enabled=True)
+    async def kup_item(self, ctx, item=None):
+       
+        if item is None:
+            embed = discord.Embed()
+            embed.add_field(name='**Error*', value='Choose the item you want to buy')
+            await ctx.send(embed=embed)
+                
+        elif item is not None:
+            c.execute(f"SELECT guild_id, item_name, item_desc, item_prize FROM shop WHERE guild_id = '{ctx.guild.id}' and item_name = '{item}'")
+            r2 = c.fetchone()
+            itemm = r2[1]
+            if item == itemm:
+
+                try:
+                    n = discord.Embed()
+                    n.add_field(name="Confirmation of purchase", value="Confirm the purchase by clicking on the emote below")
+                    msg = await ctx.send(embed=n)
+                    await msg.add_reaction('💸')
+                    await EconomyShop(self).byt(ctx, item)
+                except Exception as e:
+                    print(e)
+                
+            else:
+                embed = discord.Embed()
+                embed.add_field(name='**Error**', value='Please select the correct item from the shop!')
+                await ctx.send(embed=embed)
+    async def byt(self,ctx, item):
+        sql = ("UPDATE economy SET buy = ? WHERE guild_id = ? and user_id = ?")
+        val = (str(True), str(ctx.guild.id), str(ctx.author.id))
+        sql1 = ("UPDATE economy SET buyitem = ? WHERE guild_id = ? and user_id = ?")
+        val1 = (str(item), str(ctx.guild.id), str(ctx.author.id))
+        c.execute(sql, val)
+        c.execute(sql1, val1)
+
+
+    @commands.Cog.listener()
+    async def on_reaction_add(self, reaction, user):
+        if reaction.emoji == '💸':
+            if user.id != 733251109803655269:
+                await reaction.remove(user)
+            else:
+                pass
+            c.execute(f"SELECT user_id, cash, buy, buyitem  FROM economy WHERE guild_id = '{user.guild.id}'")
+            r = c.fetchone()
+            cash = float(r[1])
+            kupowanie = r[2]
+            item = r[3]
+            c.execute(f"SELECT guild_id, item_prize FROM shop WHERE guild_id = '{user.guild.id}' and item_name = '{item}'")
+            r2 = c.fetchone()
+            cena = float(r2[1])
+            if str(r[2]) == 'True':
+                if cash >= cena:
+                    sql = ("UPDATE economy SET buy = ? WHERE guild_id = ? and user_id = ?")
+                    val = (str(False), str(user.guild.id), str(user.id))
+                    c.execute(sql, val)
+                    await EconomyShop(self).kupdb(user, reaction)
+                else:
+                    await EconomyShop(self).brkmn(user, reaction)
+            else:
+                return
+                
+    async def kupdb(self, user, reaction):
+        if user.bot:
+            return
+        else:
+            c.execute(f"SELECT guild_id, item_prize FROM shop WHERE guild_id = '{user.guild.id}'")
+            r1 = c.fetchone()
+            cena = r1[1]
+            c.execute(f"SELECT user_id, cash FROM economy WHERE guild_id = '{user.guild.id}'")
+            r = c.fetchone()
+            cash = r[1]
+            sql1 = ("UPDATE economy SET cash = ? WHERE guild_id = ? and user_id = ?")
+            val1 = (float(cash) - int(cena), str(user.guild.id), str(user.id))
+            c.execute(sql1, val1)
+            conn.commit()
+            await EconomyShop(self).kpembed(user, reaction)
+            
+
+
+    async def brkmn(self, user, reaction):
+        if user.bot:
+            return
+        else:
+            z = discord.Embed()
+            z.add_field(name='**Error**', value=f'Brak srodkow na zakup itemu')
+            channel = reaction.message.channel
+            await channel.send(embed=z)
+
+    async def kpembed(self,user, reaction):
+        if user.bot:
+            return
+        else:
+            c.execute(f"SELECT guild_id, item_name, item_desc, item_prize FROM shop WHERE guild_id = '{user.guild.id}'")
+            r2 = c.fetchone()
+            itemm = r2[1]
+            z = discord.Embed()
+            z.add_field(name='Transaction Accepted', value=f'you purchased an item `{itemm}` in guild **{user.guild.name}**, send confirmation of purchase to administration to receive reward')
+            conn.commit()
+            channel = reaction.message.channel
+            await channel.send(embed=z)
+            conn.commit()
+            
+            
+            
+
+
+    
+
+
+def setup(bot):
+    bot.add_cog(EconomyShop(bot))
